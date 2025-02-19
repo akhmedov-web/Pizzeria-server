@@ -20,7 +20,7 @@ const main = () => {
   bot.on("message", async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
-
+  
     if (text === "/start") {
       await bot.sendMessage(
         chatId,
@@ -32,20 +32,27 @@ const main = () => {
               [{ text: "📞 Telefon raqamni jo'natish", request_contact: true }],
             ],
             resize_keyboard: true,
-            one_time_keyboard: true,
+            one_time_keyboard: true, // This only works for some clients
           },
         }
       );
     }
-
+  
     if (msg.contact) {
       const phoneNumber = msg.contact.phone_number;
       userPhoneNumbers.set(chatId, phoneNumber);
-
+  
+      // Step 1: Remove the keyboard
+      await bot.sendMessage(chatId, "✅ Raqamingiz qabul qilindi!", {
+        reply_markup: {
+          remove_keyboard: true, // Ensure the reply keyboard is removed
+        },
+      });
+  
+      // Step 2: Send the inline keyboard separately
       await bot.sendMessage(
         chatId,
-        `<b>Hammasi tayyor! 😊</b>
-        \nMenudan o'zingiz xohlagan ovqatni tanlang va biz sizga tezda yetqizib beramiz!`,
+        `<b>Botga xush kelibsiz!</b>\n\nMenudan o'zingiz xohlagan ovqatni tanlang va biz sizga tezda yetqizib beramiz!`,
         {
           parse_mode: "HTML",
           reply_markup: {
@@ -62,7 +69,7 @@ const main = () => {
         }
       );
     }
-  });
+  });  
 
   // Handle callbacks
   bot.on("callback_query", (query) => {
@@ -83,12 +90,16 @@ const main = () => {
 };
 
 // Handle incoming orders from the web app
+// Handle incoming orders from the web app
 app.post("/web-data", async (req, res) => {
   try {
     const { products, userID } = req.body;
     if (!userID || !products || !products.length) {
       return res.status(400).json({ error: "Invalid request data." });
     }
+
+    // ✅ Clear previous location for the user
+    userLocations.delete(userID);
 
     const user = await bot.getChat(userID);
     const userName = `${user.first_name || ""} ${user.last_name || ""}`.trim();
@@ -104,33 +115,36 @@ app.post("/web-data", async (req, res) => {
             style: "currency",
             currency: "UZS",
             minimumFractionDigits: 0,
-        })
+          })
         }= ${totalItemPrice.toLocaleString("uz-UZ", {
           style: "currency",
           currency: "UZS",
           minimumFractionDigits: 0,
-      })}`;
+        })}`;
       })
       .join("\n\n");
 
-    const totalPrice =
-      products.reduce((a, c) => a + c.price * c.quantity, 0).toLocaleString("uz-UZ", {
+    const totalPrice = products
+      .reduce((a, c) => a + c.price * c.quantity, 0)
+      .toLocaleString("uz-UZ", {
         style: "currency",
         currency: "UZS",
         minimumFractionDigits: 0,
-    });
+      });
 
+    // Ask for location (new order starts)
     await bot.sendMessage(
       userID,
-      `📍Yetqazib berish manzilini kiriting.\n
-Misol uchun: Xo'ja Kasbi mahallasi, Alisher Navoiy ko'chasi, 8-uy`
+      `📍Yetqazib berish manzilini kiriting.\nMisol uchun: Xo'ja Kasbi mahallasi, Alisher Navoiy ko'chasi, 8-uy`
     );
-    bot.on("message", (msg) => {
-      userLocations.set(msg.chat.id, msg.text);
-      const location = userLocations.get(userID) || "Unknown";
-      if (userLocations.has(userID)) {
+
+    const locationHandler = async (msg) => {
+      if (msg.chat.id === userID && msg.text !== "/start") {
+        userLocations.set(userID, msg.text); // ✅ Store new location
+        const location = userLocations.get(userID) || "Unknown";
+
         // Confirm order to user
-        bot.sendMessage(
+        await bot.sendMessage(
           userID,
           `<b>Buyurtmangiz muvaffaqqiyatli qabul qilindi. ✅</b>
           \n<b>Buyurtma tafsilotlari:</b>\n${productDetails}
@@ -144,13 +158,20 @@ Misol uchun: Xo'ja Kasbi mahallasi, Alisher Navoiy ko'chasi, 8-uy`
         );
 
         // Notify admin
-        bot.sendMessage(
+        await bot.sendMessage(
           ADMIN_CHAT_ID,
           `<b>🚨 Yangi buyurtma!</b>\n\n<b>Ism:</b> ${userName}\n<b>Username:</b> ${userHandle}\n<b>Telefon raqam:</b> ${phoneNumber}\n<b>Manzil:</b> ${location}\n\n<b>Buyurtmalar:</b>\n${productDetails}\n\n<b>Umumiy:</b> ${totalPrice}`,
           { parse_mode: "HTML" }
         );
+
+        // ✅ Remove the handler after handling one location
+        bot.removeListener("message", locationHandler);
       }
-    });
+    };
+
+    // ✅ Attach location listener (but clear old ones first)
+    bot.removeListener("message", locationHandler);
+    bot.on("message", locationHandler);
 
     res.status(200).json({ success: true });
   } catch (error) {
@@ -158,6 +179,7 @@ Misol uchun: Xo'ja Kasbi mahallasi, Alisher Navoiy ko'chasi, 8-uy`
     res.status(500).json({ error: "Internal server error." });
   }
 });
+
 
 app.get("/", (req, res) => {
   res.send("Bot is alive!");
