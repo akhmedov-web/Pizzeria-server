@@ -20,7 +20,7 @@ const main = () => {
   bot.on("message", async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
-  
+
     if (text === "/start") {
       await bot.sendMessage(
         chatId,
@@ -37,18 +37,18 @@ const main = () => {
         }
       );
     }
-  
+
     if (msg.contact) {
       const phoneNumber = msg.contact.phone_number;
       userPhoneNumbers.set(chatId, phoneNumber);
-  
+
       // Step 1: Remove the keyboard
       await bot.sendMessage(chatId, "✅ Raqamingiz qabul qilindi!", {
         reply_markup: {
           remove_keyboard: true, // Ensure the reply keyboard is removed
         },
       });
-  
+
       // Step 2: Send the inline keyboard separately
       await bot.sendMessage(
         chatId,
@@ -69,7 +69,7 @@ const main = () => {
         }
       );
     }
-  });  
+  });
 
   // Handle callbacks
   bot.on("callback_query", (query) => {
@@ -110,13 +110,13 @@ app.post("/web-data", async (req, res) => {
     const productDetails = products
       .map((item, index) => {
         const totalItemPrice = item.price * item.quantity;
-        return `<b>${index + 1}. ${item.title}</b>\n${item.quantity} x ${
-          item.price.toLocaleString("uz-UZ", {
-            style: "currency",
-            currency: "UZS",
-            minimumFractionDigits: 0,
-          })
-        }= ${totalItemPrice.toLocaleString("uz-UZ", {
+        return `<b>${index + 1}. ${item.title}</b>\n${
+          item.quantity
+        } x ${item.price.toLocaleString("uz-UZ", {
+          style: "currency",
+          currency: "UZS",
+          minimumFractionDigits: 0,
+        })}= ${totalItemPrice.toLocaleString("uz-UZ", {
           style: "currency",
           currency: "UZS",
           minimumFractionDigits: 0,
@@ -154,7 +154,19 @@ app.post("/web-data", async (req, res) => {
 ☎️ 90 670 16 06
 📨 @akhmedov_mailbox
           \n<b>Sizga xizmat ko'rsatganimizdan xursandmiz😊</b>`,
-          { parse_mode: "HTML" }
+          {
+            parse_mode: "HTML",
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: "Menu 📒",
+                    web_app: { url: "https://pizzeriademo.vercel.app/" },
+                  },
+                ],
+              ],
+            },
+          }
         );
 
         // Notify admin
@@ -179,7 +191,6 @@ app.post("/web-data", async (req, res) => {
     res.status(500).json({ error: "Internal server error." });
   }
 });
-
 
 app.get("/", (req, res) => {
   res.send("Bot is alive!");
